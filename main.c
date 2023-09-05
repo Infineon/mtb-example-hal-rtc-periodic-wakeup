@@ -1,7 +1,7 @@
 /******************************************************************************
 * File Name:   main.c
 *
-* Description: This is the source code for RTC alarm periodic wakeup Example 
+* Description: This is the source code for RTC alarm periodic wakeup Example
 * using HAL APIs.
 *
 * Related Document: See README.md
@@ -41,7 +41,7 @@
 *******************************************************************************/
 
 /******************************************************************************
-* Include header files
+* Header files
 ******************************************************************************/
 #include "cyhal.h"
 #include "cybsp.h"
@@ -49,7 +49,7 @@
 
 /*******************************************************************************
 * Macros
-********************************************************************************/
+*******************************************************************************/
 /* Initial Time and Date definitions */
 #define RTC_INITIAL_DATE_SEC        0u
 #define RTC_INITIAL_DATE_MIN        17u
@@ -57,22 +57,22 @@
 #define RTC_INITIAL_DATE_DAY        28u
 #define RTC_INITIAL_DATE_MONTH      2u
 #define RTC_INITIAL_DATE_YEAR       2022u
-
 #define RTC_INTERRUPT_PRIORITY      3u
-
 #define STRING_BUFFER_SIZE          80u
-
 /* Constants to define LONG and SHORT presses on User Button (x10 = ms) */
 #define SHORT_PRESS_COUNT           10u     /* 100 ms < press < 2 sec */
 #define LONG_PRESS_COUNT            200u    /* press > 2 sec */
-
 /* Glitch delays */
 #define SHORT_GLITCH_DELAY_MS       10u     /* in ms */
 #define LONG_GLITCH_DELAY_MS        100u    /* in ms */
-
-/* macro for Alarm set by seconds */
+/* Macro for Alarm set by seconds */
 #define USE_SECONDS_FOR_ALARM 10
 
+/*******************************************************************************
+* Global Variables
+*******************************************************************************/
+cyhal_rtc_t rtc_obj;
+/* User button was pressed for how long */
 typedef enum
 {
     SWITCH_NO_EVENT     = 0u,
@@ -81,17 +81,37 @@ typedef enum
 } en_switch_event_t;
 
 /*******************************************************************************
-* Global Variables
-*******************************************************************************/
-cyhal_rtc_t rtc_obj;
-
-/*****************************************************************************
 * Function Prototypes
-********************************************************************************/
+*******************************************************************************/
 void set_rtc_alarm_date_time(void);
 en_switch_event_t get_switch_event(void);
 void debug_printf(const char *str);
-void handle_error(void);
+void handle_error(uint32_t status);
+
+/*******************************************************************************
+* Function Definitions
+*******************************************************************************/
+
+/*******************************************************************************
+* Function Name: handle_error
+********************************************************************************
+* Summary:
+* User defined error handling function
+*
+* Parameters:
+*  uint32_t status - status indicates success or failure
+*
+* Return:
+*  void
+*
+*******************************************************************************/
+void handle_error(uint32_t status)
+{
+    if (status != CY_RSLT_SUCCESS)
+    {
+        CY_ASSERT(0);
+    }
+}
 
 /*******************************************************************************
 * Function Name: main
@@ -119,41 +139,41 @@ int main(void)
 
     /* Initialize the device and board peripherals */
     result = cybsp_init();
-    if (result != CY_RSLT_SUCCESS)
-    {
-        handle_error();
-    }
+    handle_error(result);
 
     /* Enable global interrupts */
     __enable_irq();
 
     /* Initialize retarget-io for uart logging */
-    result = cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX,
-                                CY_RETARGET_IO_BAUDRATE);
-    if (result != CY_RSLT_SUCCESS)
-    {
-        handle_error();
-    }
+    result = cy_retarget_io_init_fc(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX,
+                                    CYBSP_DEBUG_UART_CTS,CYBSP_DEBUG_UART_RTS,
+                                    CY_RETARGET_IO_BAUDRATE);
+
+    /* Retarget-io init failed. Stop program execution */
+    handle_error(result);
 
     /* \x1b[2J\x1b[;H - ANSI ESC sequence for clear screen */
     printf("\x1b[2J\x1b[;H");
-    printf("********************************************************************************\r\n");
+    printf("*************************************************************\r\n");
     printf("HAL: RTC periodic wakeup alarm example\r\n");
-    printf("********************************************************************************\r\n");
-    printf("Short press 'SW2' key to DeepSleep mode, long press 'SW2' key to Hibernate mode.\r\n\r\n");
+    printf("*************************************************************\r\n");
+    printf("Short press 'SW2' key to DeepSleep mode.\r\n\r\n");
+    printf("Long press 'SW2' key to Hibernate mode.\r\n\r\n");
 
     /* Initialize the User Button */
-    cyhal_gpio_init(CYBSP_USER_BTN, CYHAL_GPIO_DIR_INPUT, CYHAL_GPIO_DRIVE_PULLUP, CYBSP_BTN_OFF);
+    result = cyhal_gpio_init(CYBSP_USER_BTN, CYHAL_GPIO_DIR_INPUT,
+                    CYHAL_GPIO_DRIVE_PULLUP, CYBSP_BTN_OFF);
+    /* User button init failed. Stop program execution */
+    handle_error(result);
 
     /* Initialize RTC */
     result = cyhal_rtc_init(&rtc_obj);
-    if (result != CY_RSLT_SUCCESS)
-    {
-        handle_error();
-    }
+    /* RTC init failed. Stop program execution */
+    handle_error(result);
 
     /* Check the reset reason */
-    if(CYHAL_SYSTEM_RESET_HIB_WAKEUP == (cyhal_system_get_reset_reason() & CYHAL_SYSTEM_RESET_HIB_WAKEUP))
+    if(CYHAL_SYSTEM_RESET_HIB_WAKEUP ==
+        (cyhal_system_get_reset_reason() & CYHAL_SYSTEM_RESET_HIB_WAKEUP))
     {
         /* The reset has occurred on a wakeup from Hibernate power mode */
         debug_printf("Wakeup from the Hibernate mode\r\n");
@@ -161,20 +181,24 @@ int main(void)
     else
     {
         /* Update the initialization time and date to the RTC peripheral */
-        result = cyhal_rtc_write_direct(&rtc_obj, RTC_INITIAL_DATE_SEC, RTC_INITIAL_DATE_MIN,
-                                        RTC_INITIAL_DATE_HOUR, RTC_INITIAL_DATE_DAY,
-                                        RTC_INITIAL_DATE_MONTH, RTC_INITIAL_DATE_YEAR);
-        if (result != CY_RSLT_SUCCESS)
-        {
-            handle_error();
-        }
+        result = cyhal_rtc_write_direct(&rtc_obj,
+                                        RTC_INITIAL_DATE_SEC,
+                                        RTC_INITIAL_DATE_MIN,
+                                        RTC_INITIAL_DATE_HOUR,
+                                        RTC_INITIAL_DATE_DAY,
+                                        RTC_INITIAL_DATE_MONTH,
+                                        RTC_INITIAL_DATE_YEAR);
+        handle_error(result);
     }
 
     /* Print the current date and time by UART */
     debug_printf("Current date and time.\r\n");
 
     /* Enable the alarm event to trigger an interrupt */
-    cyhal_rtc_enable_event(&rtc_obj, CYHAL_RTC_ALARM, RTC_INTERRUPT_PRIORITY, true);
+    cyhal_rtc_enable_event(&rtc_obj,
+                            CYHAL_RTC_ALARM,
+                            RTC_INTERRUPT_PRIORITY,
+                            true);
 
     for (;;)
     {
@@ -195,11 +219,11 @@ int main(void)
             case SWITCH_LONG_PRESS:
                 debug_printf("Go to Hibernate mode\r\n");
 
-                /* Set the RTC generate alarm after 10 seconds */
+                /*Set the RTC generate alarm after 10 seconds */
                 set_rtc_alarm_date_time();
                 cyhal_system_delay_ms(LONG_GLITCH_DELAY_MS);
 
-                /* Go to hibernate and configure the RTC alarm as wakeup source */
+                /*Go to hibernate and configure the RTC alarm as wakeup source*/
                 cyhal_syspm_hibernate(CYHAL_SYSPM_HIBERNATE_RTC_ALARM);
                 break;
 
@@ -218,6 +242,9 @@ int main(void)
 * Parameter:
 *  void
 *
+* Return:
+*  void
+*
 *******************************************************************************/
 void set_rtc_alarm_date_time(void)
 {
@@ -225,22 +252,24 @@ void set_rtc_alarm_date_time(void)
 
     /* Print the RTC alarm time by UART */
     debug_printf("RTC alarm will be generated after 10 seconds\r\n");
-    /* Set the RTC alarm for the specified number of seconds in the future by editing the macro(USE_SECONDS_FOR_ALARM) */
+    /* Set the RTC alarm for the specified number of seconds in the future by
+     editing the macro(USE_SECONDS_FOR_ALARM) */
     result = cyhal_rtc_set_alarm_by_seconds(&rtc_obj, USE_SECONDS_FOR_ALARM);
-    if (result != CY_RSLT_SUCCESS)
-    {
-        handle_error();
-    }
+    /* Setting RTC Alarm failed. Stop program execution */
+    handle_error(result);
 }
 
 /*******************************************************************************
 * Function Name: get_switch_event
-****************************************************************************//**
+********************************************************************************
 * Summary:
 *  Returns how the User button was pressed:
 *  - SWITCH_NO_EVENT: No press
 *  - SWITCH_SHORT_PRESS: Short press was detected
 *  - SWITCH_LONG_PRESS: Long press was detected
+*
+* Parameter:
+*  void
 *
 * Return:
 *  Switch event that occurred, if any.
@@ -298,11 +327,9 @@ void debug_printf(const char *str)
 
     /* Get the current time and date from the RTC peripheral */
     result = cyhal_rtc_read(&rtc_obj, &current_date_time);
-    if (result != CY_RSLT_SUCCESS)
-    {
-        handle_error();
-    }
-    /* strftime() is a C library function which is used to format date and time into string.
+    handle_error(result);
+    /* strftime() is a C library function which is used to format date and time
+     * into string.
      * It comes under the header file "time.h" which is included by HAL (See
      * http://www.cplusplus.com/reference/ctime/strftime/)
      */
@@ -311,25 +338,6 @@ void debug_printf(const char *str)
     printf("%s: %s", buffer, str);
 }
 
-/*******************************************************************************
-* Function Name: handle_error
-********************************************************************************
-* Summary:
-* User defined error handling function
-*
-* Parameters:
-*  void
-*
-* Return:
-*  void
-*
-*******************************************************************************/
-void handle_error(void)
-{
-    /* Disable all interrupts. */
-    __disable_irq();
 
-    CY_ASSERT(0);
-}
 
 /* [] END OF FILE */
